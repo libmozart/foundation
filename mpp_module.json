@@ -1,0 +1,4 @@
+{
+  "Name": "Foundation",
+  "Deps": ["Core"]
+}

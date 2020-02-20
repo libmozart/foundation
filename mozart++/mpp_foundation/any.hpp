@@ -12,7 +12,123 @@
 #include <mozart++/memory>
 #include <typeindex>
 
+namespace mpp_impl {
+    // To String
+    template <typename _Tp>
+    class to_string_helper {
+        template <typename T, typename X>
+        struct matcher;
+
+        template <typename T>
+        static constexpr bool match(T *) {
+            return false;
+        }
+
+        template <typename T>
+        static constexpr bool match(matcher<T, decltype(std::to_string(std::declval<T>()))> *) {
+            return true;
+        }
+
+    public:
+        static constexpr bool value = match<_Tp>(nullptr);
+    };
+
+    template <typename, bool>
+    struct to_string_if;
+
+    template <typename T>
+    struct to_string_if<T, true> {
+        static std::string to_string(const T &val) {
+            return std::to_string(val);
+        }
+    };
+
+    template <typename T>
+    struct to_string_if<T, false> {
+        static std::string to_string(const T &) {
+            return mpp::cxx_demangle(typeid(T).name());
+        }
+    };
+
+    // Hash
+    template <typename _Tp>
+    class hash_helper {
+        template <typename T, decltype(&std::hash<T>::operator()) X>
+        struct matcher;
+
+        template <typename T>
+        static constexpr bool match(T *) noexcept {
+            return false;
+        }
+
+        template <typename T>
+        static constexpr bool match(matcher<T, &std::hash<T>::operator()> *) noexcept {
+            return true;
+        }
+
+    public:
+        static constexpr bool value = match<_Tp>(nullptr);
+    };
+
+    template <typename T>
+    struct hash_gen_base {
+        std::size_t base_code = typeid(T).hash_code();
+    };
+
+    template <typename, typename, bool>
+    struct hash_if;
+
+    template <typename T, typename X>
+    struct hash_if<T, X, true> {
+        static std::size_t hash(const X &val) {
+            static std::hash<T> gen;
+            static hash_gen_base<X> genBase;
+            return gen(static_cast<const T>(val)) + genBase.base_code;
+        }
+    };
+
+    template <typename T>
+    struct hash_if<T, T, true> {
+        static std::size_t hash(const T &val) {
+            static std::hash<T> gen;
+            return gen(val);
+        }
+    };
+
+    template <typename T, typename X>
+    struct hash_if<T, X, false> {
+        static std::size_t hash(const X &val) {
+            mpp::throw_ex<mpp::runtime_error>("Do not support hash operation.");
+            return 0;
+        }
+    };
+
+    template <typename, bool>
+    struct hash_enum_resolver;
+
+    template <typename T>
+    struct hash_enum_resolver<T, true> {
+        using type=hash_if<std::size_t, T, true>;
+    };
+
+    template <typename T>
+    struct hash_enum_resolver<T, false> {
+        using type=hash_if<T, T, hash_helper<T>::value>;
+    };
+}
+
 namespace mpp {
+    template <typename T>
+    static std::string to_string(const T &val) {
+        return mpp_impl::to_string_if<T, mpp_impl::to_string_helper<T>::value>::to_string(val);
+    }
+
+    template <typename T>
+    static std::size_t hash(const T &val) {
+        using type=typename mpp_impl::hash_enum_resolver<T, std::is_enum<T>::value>::type;
+        return type::hash(val);
+    }
+
     class any;
 
     class any_ref;
@@ -90,6 +206,20 @@ private:
          * @return pointer of new object
          */
         virtual stor_base *clone() const = 0;
+
+        /**
+         * Convert data to string
+         *
+         * @return text in std::string
+         */
+        virtual std::string to_string() const = 0;
+
+        /**
+         * Calculate hash value of data
+         *
+         * @return hash value in std::size_t
+         */
+        virtual std::size_t hash() const = 0;
     };
 
     /**
@@ -150,13 +280,14 @@ private:
         stor_base *clone() const override {
             return get_allocator().alloc(data);
         }
-        /*
-        type_support *extension() const override
-        {
-            // NOT IMPLEMENTED YET
-            return nullptr;
+
+        std::string to_string() const override {
+            return mpp::to_string(data);
         }
-        */
+
+        std::size_t hash() const override {
+            return mpp::hash(data);
+        }
     };
 
     /*
@@ -308,6 +439,22 @@ public:
             return get_handler()->type();
     }
 
+    /**
+     * @return Convert data to text, void if this any holds nothing
+     */
+    inline std::string to_string() const {
+        if (m_data.status == stor_status::null)
+            return cxx_demangle(typeid(void).name());
+        else
+            return get_handler()->to_string();
+    }
+
+    inline std::size_t hash() const {
+        if (m_data.status == stor_status::null)
+            mpp::throw_ex<mpp::runtime_error>("Do not support hash operation.");
+        return get_handler()->hash();
+    }
+
     template <typename T>
     inline T &get() {
         stor_base *ptr = get_handler();
@@ -380,7 +527,7 @@ public:
         return *this;
     }
 
-    any_ref &operator=(any_ref &&view) {
+    any_ref &operator=(any_ref &&view) noexcept {
         if (&view != this) {
             if (!is_ref)
                 get_allocator().free(ptr);

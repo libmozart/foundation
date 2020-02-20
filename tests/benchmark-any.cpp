@@ -1,14 +1,8 @@
-#define MOZART_DEBUG
-#define MOZART_LOGCR_ONLY
-
 #include <mozart++/timer>
 #include <mozart++/any>
 #include <iostream>
 #include <string>
 #include <any>
-
-template <typename T>
-mpp::any::default_allocator<mpp::any::stor_impl<T>> mpp::any::stor_impl<T>::allocator;
 
 int test_epoch = 10000000;
 

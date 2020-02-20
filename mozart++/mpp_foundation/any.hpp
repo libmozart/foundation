@@ -108,7 +108,11 @@ private:
         /**
          * Static Allocator
          */
-        static default_allocator<stor_impl<T>> allocator;
+        static default_allocator<stor_impl<T>>& get_allocator()
+        {
+            static default_allocator<stor_impl<T>> allocator;
+            return allocator;
+        }
 
         /**
          * Default constructor, implemented using default
@@ -135,7 +139,7 @@ private:
             if (is_static)
                 this->~stor_impl();
             else
-                allocator.free(this);
+                get_allocator().free(this);
         }
 
         void clone(byte_t *ptr) const override {
@@ -143,7 +147,7 @@ private:
         }
 
         stor_base *clone() const override {
-            return allocator.alloc(data);
+            return get_allocator().alloc(data);
         }
         /*
         type_support *extension() const override
@@ -219,15 +223,15 @@ private:
     }
 
     template <typename T>
-    inline void store(const T &val, char(*)[stor_union::static_stor_size - sizeof(stor_impl<T>) + 1] = 0) {
+    inline void store(const T &val, char(*)[sizeof(stor_impl<T>) <= stor_union::static_stor_size] = 0) {
         ::new(m_data.impl.data) stor_impl<T>(val);
         m_data.status = stor_status::data;
         MOZART_LOGEV("Any SDO Enabled.")
     }
 
     template <typename T>
-    inline void store(const T &val, char(*)[sizeof(stor_impl<T>) - stor_union::static_stor_size] = 0) {
-        m_data.impl.ptr = stor_impl<T>::allocator.alloc(val);
+    inline void store(const T &val, char(*)[sizeof(stor_impl<T>) > stor_union::static_stor_size] = 0) {
+        m_data.impl.ptr = stor_impl<T>::get_allocator().alloc(val);
         m_data.status = stor_status::ptr;
         MOZART_LOGEV("Any SDO Disabled.")
     }

@@ -11,9 +11,9 @@ add_library(mpp_foundation STATIC
 target_link_libraries(mpp_foundation mpp_core)
 set_target_properties(mpp_foundation PROPERTIES LINKER_LANGUAGE CXX)
 
-add_executable(bench-any tests/benchmark-any.cpp)
-target_link_libraries(bench-any mpp_core mpp_foundation)
-set_property(TARGET bench-any PROPERTY CXX_STANDARD 17)
+add_executable(mpp_foundation-bench-any tests/benchmark-any.cpp)
+target_link_libraries(mpp_foundation-bench-any mpp_core mpp_foundation)
+set_property(TARGET mpp_foundation-bench-any PROPERTY CXX_STANDARD 17)
 
 ## test and benchmark targets here
 file(GLOB_RECURSE CPP_SRC_LIST tests/test-*.cpp)

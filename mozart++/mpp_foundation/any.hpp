@@ -98,7 +98,6 @@ namespace mpp_impl {
     template <typename T, typename X>
     struct hash_if<T, X, false> {
         static std::size_t hash(const X &val) {
-            mpp::throw_ex<mpp::runtime_error>("Do not support hash operation.");
             return 0;
         }
     };
@@ -108,12 +107,12 @@ namespace mpp_impl {
 
     template <typename T>
     struct hash_enum_resolver<T, true> {
-        using type=hash_if<std::size_t, T, true>;
+        using type = hash_if<std::size_t, T, true>;
     };
 
     template <typename T>
     struct hash_enum_resolver<T, false> {
-        using type=hash_if<T, T, hash_helper<T>::value>;
+        using type = hash_if<T, T, hash_helper<T>::value>;
     };
 }
 
@@ -125,7 +124,7 @@ namespace mpp {
 
     template <typename T>
     static std::size_t hash(const T &val) {
-        using type=typename mpp_impl::hash_enum_resolver<T, std::is_enum<T>::value>::type;
+        using type = typename mpp_impl::hash_enum_resolver<T, std::is_enum<T>::value>::type;
         return type::hash(val);
     }
 
@@ -395,7 +394,7 @@ public:
     constexpr any() = default;
 
     template <typename T>
-    any(const T &val) {
+    /*implicit*/ any(const T &val) {
         store(val);
     }
 
@@ -444,14 +443,14 @@ public:
      */
     inline std::string to_string() const {
         if (m_data.status == stor_status::null)
-            return cxx_demangle(typeid(void).name());
+            return "mpp::any::null";
         else
             return get_handler()->to_string();
     }
 
     inline std::size_t hash() const {
         if (m_data.status == stor_status::null)
-            mpp::throw_ex<mpp::runtime_error>("Do not support hash operation.");
+            return 0;
         return get_handler()->hash();
     }
 
@@ -540,8 +539,8 @@ public:
     }
 
     inline any &get() const {
-        if (ptr)
-            throw_ex<mpp::runtime_error>("Referenced an null any object.");
+        if (ptr == nullptr)
+            throw_ex<mpp::runtime_error>("Trying to dereference null any object.");
         return *ptr;
     }
 

@@ -184,7 +184,6 @@ private:
 
     stor_union m_data;
 
-
     /**
      * @return Return inner pointer inside stor_base
      */
@@ -197,6 +196,7 @@ private:
             case stor_status::ptr:
                 return m_data.impl.ptr;
         }
+        return nullptr;
     }
 
     inline const stor_base *get_handler() const {
@@ -208,6 +208,7 @@ private:
             case stor_status::ptr:
                 return m_data.impl.ptr;
         }
+        return nullptr;
     }
 
     inline void recycle() {
@@ -218,16 +219,17 @@ private:
     }
 
     template <typename T>
-    inline void store(const T &val) {
-        if (sizeof(stor_impl<T>) <= stor_union::static_stor_size) {
-            ::new(m_data.impl.data) stor_impl<T>(val);
-            m_data.status = stor_status::data;
-            MOZART_LOGEV("Any SDO Enabled.")
-        } else {
-            m_data.impl.ptr = stor_impl<T>::allocator.alloc(val);
-            m_data.status = stor_status::ptr;
-            MOZART_LOGEV("Any SDO Disabled.")
-        }
+    inline void store(const T &val, char(*)[stor_union::static_stor_size - sizeof(stor_impl<T>) + 1] = 0) {
+        ::new(m_data.impl.data) stor_impl<T>(val);
+        m_data.status = stor_status::data;
+        MOZART_LOGEV("Any SDO Enabled.")
+    }
+
+    template <typename T>
+    inline void store(const T &val, char(*)[sizeof(stor_impl<T>) - stor_union::static_stor_size] = 0) {
+        m_data.impl.ptr = stor_impl<T>::allocator.alloc(val);
+        m_data.status = stor_status::ptr;
+        MOZART_LOGEV("Any SDO Disabled.")
     }
 
     inline void copy(const any &data) {
@@ -254,10 +256,10 @@ public:
         mpp::swap(m_data, val.m_data);
     }
 
-    any() = default;
+    constexpr any() = default;
 
     template <typename T>
-    /*implicit*/ any(const T &val) {
+    explicit any(const T &val) {
         store(val);
     }
 
@@ -315,5 +317,15 @@ public:
         if (ptr->type() != typeid(T))
             throw_ex<mpp::runtime_error>("Access wrong type of any.");
         return static_cast<const stor_impl<T> *>(ptr)->data;
+    }
+
+    template <typename T>
+    explicit operator T &() {
+        return this->get<T>();
+    }
+
+    template <typename T>
+    explicit operator const T &() const {
+        return this->get<T>();
     }
 };

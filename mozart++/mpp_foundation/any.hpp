@@ -122,7 +122,7 @@ private:
         /**
          * Destructor, implemented using default
          */
-        virtual ~stor_impl() = default;
+        ~stor_impl() override = default;
 
         /**
          * Disable the copy constructor
@@ -174,7 +174,7 @@ private:
     struct stor_union {
         // threshold of small object optimization, which must be greater than
         // std::alignment_of<stor_base *>::value
-        static constexpr unsigned int static_stor_size = 3 * std::alignment_of<stor_base *>::value;
+        static constexpr unsigned int static_stor_size = std::alignment_of<stor_base *>::value;
 
         union {
             // raw memory

@@ -14,6 +14,8 @@
 
 namespace mpp {
     class any;
+
+    class any_ref;
 }
 
 class mpp::any final {
@@ -108,8 +110,7 @@ private:
         /**
          * Static Allocator
          */
-        static default_allocator<stor_impl<T>>& get_allocator()
-        {
+        static default_allocator<stor_impl<T>> &get_allocator() {
             static default_allocator<stor_impl<T>> allocator;
             return allocator;
         }
@@ -263,7 +264,7 @@ public:
     constexpr any() = default;
 
     template <typename T>
-    explicit any(const T &val) {
+    any(const T &val) {
         store(val);
     }
 
@@ -331,5 +332,73 @@ public:
     template <typename T>
     explicit operator const T &() const {
         return this->get<T>();
+    }
+};
+
+class mpp::any_ref final {
+    static any::default_allocator<any> &get_allocator() {
+        static any::default_allocator<any> allocator;
+        return allocator;
+    }
+
+    any *ptr = nullptr;
+    bool is_ref = true;
+public:
+    constexpr any_ref() = default;
+
+    any_ref(const any_ref &view) : is_ref(view.is_ref) {
+        if (!is_ref)
+            ptr = get_allocator().alloc(*view.ptr);
+        else
+            ptr = view.ptr;
+    }
+
+    any_ref(any_ref &&view) noexcept : ptr(view.ptr), is_ref(view.is_ref) {
+        view.ptr = nullptr;
+        view.is_ref = true;
+    }
+
+    any_ref(any &val) : ptr(&val), is_ref(true) {}
+
+    any_ref(any val) : ptr(get_allocator().alloc(std::move(val))), is_ref(false) {}
+
+    ~any_ref() {
+        if (is_ref)
+            get_allocator().free(ptr);
+    }
+
+    any_ref &operator=(const any_ref &view) {
+        if (&view != this) {
+            if (!is_ref)
+                get_allocator().free(ptr);
+            is_ref = view.is_ref;
+            if (!is_ref)
+                ptr = get_allocator().alloc(*view.ptr);
+            else
+                ptr = view.ptr;
+        }
+        return *this;
+    }
+
+    any_ref &operator=(any_ref &&view) {
+        if (&view != this) {
+            if (!is_ref)
+                get_allocator().free(ptr);
+            is_ref = view.is_ref;
+            ptr = view.ptr;
+            view.ptr = nullptr;
+            view.is_ref = true;
+        }
+        return *this;
+    }
+
+    inline any &get() const {
+        if (ptr)
+            throw_ex<mpp::runtime_error>("Referenced an null any object.");
+        return *ptr;
+    }
+
+    operator any &() const {
+        return get();
     }
 };

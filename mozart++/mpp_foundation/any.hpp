@@ -12,8 +12,125 @@
 #include <mozart++/memory>
 #include <typeindex>
 
+namespace mpp_impl {
+    // To String
+    template <typename _Tp>
+    class to_string_helper {
+        template <typename T, typename X>
+        struct matcher;
+
+        template <typename T>
+        static constexpr bool match(T *) {
+            return false;
+        }
+
+        template <typename T>
+        static constexpr bool match(matcher<T, decltype(std::to_string(std::declval<T>()))> *) {
+            return true;
+        }
+
+    public:
+        static constexpr bool value = match<_Tp>(nullptr);
+    };
+
+    template <typename, bool>
+    struct to_string_if;
+
+    template <typename T>
+    struct to_string_if<T, true> {
+        static std::string to_string(const T &val) {
+            return std::to_string(val);
+        }
+    };
+
+    template <typename T>
+    struct to_string_if<T, false> {
+        static std::string to_string(const T &) {
+            return mpp::cxx_demangle(typeid(T).name());
+        }
+    };
+
+    // Hash
+    template <typename _Tp>
+    class hash_helper {
+        template <typename T, decltype(&std::hash<T>::operator()) X>
+        struct matcher;
+
+        template <typename T>
+        static constexpr bool match(T *) noexcept {
+            return false;
+        }
+
+        template <typename T>
+        static constexpr bool match(matcher<T, &std::hash<T>::operator()> *) noexcept {
+            return true;
+        }
+
+    public:
+        static constexpr bool value = match<_Tp>(nullptr);
+    };
+
+    template <typename T>
+    struct hash_gen_base {
+        std::size_t base_code = typeid(T).hash_code();
+    };
+
+    template <typename, typename, bool>
+    struct hash_if;
+
+    template <typename T, typename X>
+    struct hash_if<T, X, true> {
+        static std::size_t hash(const X &val) {
+            static std::hash<T> gen;
+            static hash_gen_base<X> genBase;
+            return gen(static_cast<const T>(val)) + genBase.base_code;
+        }
+    };
+
+    template <typename T>
+    struct hash_if<T, T, true> {
+        static std::size_t hash(const T &val) {
+            static std::hash<T> gen;
+            return gen(val);
+        }
+    };
+
+    template <typename T, typename X>
+    struct hash_if<T, X, false> {
+        static std::size_t hash(const X &val) {
+            return 0;
+        }
+    };
+
+    template <typename, bool>
+    struct hash_enum_resolver;
+
+    template <typename T>
+    struct hash_enum_resolver<T, true> {
+        using type = hash_if<std::size_t, T, true>;
+    };
+
+    template <typename T>
+    struct hash_enum_resolver<T, false> {
+        using type = hash_if<T, T, hash_helper<T>::value>;
+    };
+}
+
 namespace mpp {
+    template <typename T>
+    static std::string to_string(const T &val) {
+        return mpp_impl::to_string_if<T, mpp_impl::to_string_helper<T>::value>::to_string(val);
+    }
+
+    template <typename T>
+    static std::size_t hash(const T &val) {
+        using type = typename mpp_impl::hash_enum_resolver<T, std::is_enum<T>::value>::type;
+        return type::hash(val);
+    }
+
     class any;
+
+    class any_ref;
 }
 
 class mpp::any final {
@@ -88,6 +205,20 @@ private:
          * @return pointer of new object
          */
         virtual stor_base *clone() const = 0;
+
+        /**
+         * Convert data to string
+         *
+         * @return text in std::string
+         */
+        virtual std::string to_string() const = 0;
+
+        /**
+         * Calculate hash value of data
+         *
+         * @return hash value in std::size_t
+         */
+        virtual std::size_t hash() const = 0;
     };
 
     /**
@@ -108,7 +239,10 @@ private:
         /**
          * Static Allocator
          */
-        static default_allocator<stor_impl<T>> allocator;
+        static default_allocator<stor_impl<T>> &get_allocator() {
+            static default_allocator<stor_impl<T>> allocator;
+            return allocator;
+        }
 
         /**
          * Default constructor, implemented using default
@@ -118,7 +252,7 @@ private:
         /**
          * Destructor, implemented using default
          */
-        virtual ~stor_impl() = default;
+        ~stor_impl() override = default;
 
         /**
          * Disable the copy constructor
@@ -135,7 +269,7 @@ private:
             if (is_static)
                 this->~stor_impl();
             else
-                allocator.free(this);
+                get_allocator().free(this);
         }
 
         void clone(byte_t *ptr) const override {
@@ -143,15 +277,16 @@ private:
         }
 
         stor_base *clone() const override {
-            return allocator.alloc(data);
+            return get_allocator().alloc(data);
         }
-        /*
-        type_support *extension() const override
-        {
-            // NOT IMPLEMENTED YET
-            return nullptr;
+
+        std::string to_string() const override {
+            return mpp::to_string(data);
         }
-        */
+
+        std::size_t hash() const override {
+            return mpp::hash(data);
+        }
     };
 
     /*
@@ -170,7 +305,7 @@ private:
     struct stor_union {
         // threshold of small object optimization, which must be greater than
         // std::alignment_of<stor_base *>::value
-        static constexpr unsigned int static_stor_size = 3 * std::alignment_of<stor_base *>::value;
+        static constexpr unsigned int static_stor_size = std::alignment_of<stor_base *>::value;
 
         union {
             // raw memory
@@ -184,7 +319,6 @@ private:
 
     stor_union m_data;
 
-
     /**
      * @return Return inner pointer inside stor_base
      */
@@ -197,6 +331,7 @@ private:
             case stor_status::ptr:
                 return m_data.impl.ptr;
         }
+        return nullptr;
     }
 
     inline const stor_base *get_handler() const {
@@ -208,6 +343,7 @@ private:
             case stor_status::ptr:
                 return m_data.impl.ptr;
         }
+        return nullptr;
     }
 
     inline void recycle() {
@@ -218,16 +354,17 @@ private:
     }
 
     template <typename T>
-    inline void store(const T &val) {
-        if (sizeof(stor_impl<T>) <= stor_union::static_stor_size) {
-            ::new(m_data.impl.data) stor_impl<T>(val);
-            m_data.status = stor_status::data;
-            MOZART_LOGEV("Any SDO Enabled.")
-        } else {
-            m_data.impl.ptr = stor_impl<T>::allocator.alloc(val);
-            m_data.status = stor_status::ptr;
-            MOZART_LOGEV("Any SDO Disabled.")
-        }
+    inline void store(const T &val, char(*)[sizeof(stor_impl<T>) <= stor_union::static_stor_size] = 0) {
+        ::new(m_data.impl.data) stor_impl<T>(val);
+        m_data.status = stor_status::data;
+        MOZART_LOGEV("Any SDO Enabled.")
+    }
+
+    template <typename T>
+    inline void store(const T &val, char(*)[sizeof(stor_impl<T>) > stor_union::static_stor_size] = 0) {
+        m_data.impl.ptr = stor_impl<T>::get_allocator().alloc(val);
+        m_data.status = stor_status::ptr;
+        MOZART_LOGEV("Any SDO Disabled.")
     }
 
     inline void copy(const any &data) {
@@ -254,7 +391,7 @@ public:
         mpp::swap(m_data, val.m_data);
     }
 
-    any() = default;
+    constexpr any() = default;
 
     template <typename T>
     /*implicit*/ any(const T &val) {
@@ -301,6 +438,22 @@ public:
             return get_handler()->type();
     }
 
+    /**
+     * @return Convert data to text, void if this any holds nothing
+     */
+    inline std::string to_string() const {
+        if (m_data.status == stor_status::null)
+            return "mpp::any::null";
+        else
+            return get_handler()->to_string();
+    }
+
+    inline std::size_t hash() const {
+        if (m_data.status == stor_status::null)
+            return 0;
+        return get_handler()->hash();
+    }
+
     template <typename T>
     inline T &get() {
         stor_base *ptr = get_handler();
@@ -315,5 +468,83 @@ public:
         if (ptr->type() != typeid(T))
             throw_ex<mpp::runtime_error>("Access wrong type of any.");
         return static_cast<const stor_impl<T> *>(ptr)->data;
+    }
+
+    template <typename T>
+    explicit operator T &() {
+        return this->get<T>();
+    }
+
+    template <typename T>
+    explicit operator const T &() const {
+        return this->get<T>();
+    }
+};
+
+class mpp::any_ref final {
+    static any::default_allocator<any> &get_allocator() {
+        static any::default_allocator<any> allocator;
+        return allocator;
+    }
+
+    any *ptr = nullptr;
+    bool is_ref = true;
+public:
+    constexpr any_ref() = default;
+
+    any_ref(const any_ref &view) : is_ref(view.is_ref) {
+        if (!is_ref)
+            ptr = get_allocator().alloc(*view.ptr);
+        else
+            ptr = view.ptr;
+    }
+
+    any_ref(any_ref &&view) noexcept : ptr(view.ptr), is_ref(view.is_ref) {
+        view.ptr = nullptr;
+        view.is_ref = true;
+    }
+
+    any_ref(any &val) : ptr(&val), is_ref(true) {}
+
+    any_ref(any val) : ptr(get_allocator().alloc(std::move(val))), is_ref(false) {}
+
+    ~any_ref() {
+        if (is_ref)
+            get_allocator().free(ptr);
+    }
+
+    any_ref &operator=(const any_ref &view) {
+        if (&view != this) {
+            if (!is_ref)
+                get_allocator().free(ptr);
+            is_ref = view.is_ref;
+            if (!is_ref)
+                ptr = get_allocator().alloc(*view.ptr);
+            else
+                ptr = view.ptr;
+        }
+        return *this;
+    }
+
+    any_ref &operator=(any_ref &&view) noexcept {
+        if (&view != this) {
+            if (!is_ref)
+                get_allocator().free(ptr);
+            is_ref = view.is_ref;
+            ptr = view.ptr;
+            view.ptr = nullptr;
+            view.is_ref = true;
+        }
+        return *this;
+    }
+
+    inline any &get() const {
+        if (ptr == nullptr)
+            throw_ex<mpp::runtime_error>("Trying to dereference null any object.");
+        return *ptr;
+    }
+
+    operator any &() const {
+        return get();
     }
 };

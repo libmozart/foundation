@@ -15,7 +15,7 @@ struct test_large_data {
 
 int main() {
     std::cout << "Size of std::any        : " << sizeof(std::any) << std::endl;
-    std::cout << "Size of cov::any        : " << sizeof(mpp::any) << std::endl;
+    std::cout << "Size of mpp::any        : " << sizeof(mpp::any) << std::endl;
 
     std::cout << std::endl;
 
@@ -32,14 +32,14 @@ int main() {
 
     std::cout << std::endl;
 
-    std::cout << "[Small Data] mpp::any instancing: " << mpp::timer::measure([]() {
+    std::cout << "[Small Data] std::any instancing: " << mpp::timer::measure([]() {
         std::any a(10);
         for (int i = 0; i < test_epoch; ++i) {
             ++std::any_cast<int &>(a);
             --std::any_cast<int &>(a);
         }
     }) << std::endl;
-    std::cout << "[Small Data] cov::any instancing: " << mpp::timer::measure([]() {
+    std::cout << "[Small Data] mpp::any instancing: " << mpp::timer::measure([]() {
         mpp::any b(10);
         for (int i = 0; i < test_epoch; ++i) {
             ++b.get<int>();
@@ -69,7 +69,7 @@ int main() {
             std::any_cast<test_large_data &>(a).str.pop_back();
         }
     }) << std::endl;
-    std::cout << "[Large Data] cov::any instancing: " << mpp::timer::measure([]() {
+    std::cout << "[Large Data] mpp::any instancing: " << mpp::timer::measure([]() {
         mpp::any b(test_large_data("Hello"));
         for (int i = 0; i < test_epoch; ++i) {
             b.get<test_large_data>().str.push_back('c');

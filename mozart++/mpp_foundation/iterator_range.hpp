@@ -68,9 +68,4 @@ namespace mpp {
         return make_range<IterT>(iterable_traits<Container>::cbegin(std::forward<Container>(c)),
             iterable_traits<Container>::cend(std::forward<Container>(c)));
     }
-
-    template <typename T>
-    iterator_range<T> make_range(std::pair<T, T> p) {
-        return iterator_range<T>(std::move(p.first), std::move(p.second));
-    }
 }

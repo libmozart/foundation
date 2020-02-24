@@ -54,18 +54,10 @@ namespace mpp {
     }
 
     template <typename Container>
-    auto make_range(Container &c) {
+    auto make_range(Container &&c) {
         static_assert(is_iterable_v<Container>, "not an iterable");
         using IterT = typename iterable_traits<Container>::iterator_type;
         return make_range<IterT>(iterable_traits<Container>::begin(std::forward<Container>(c)),
             iterable_traits<Container>::end(std::forward<Container>(c)));
-    }
-
-    template <typename Container>
-    auto make_range(const Container &c) {
-        static_assert(is_iterable_v<Container>, "not an iterable");
-        using IterT = typename iterable_traits<Container>::iterator_type;
-        return make_range<IterT>(iterable_traits<Container>::cbegin(std::forward<Container>(c)),
-            iterable_traits<Container>::cend(std::forward<Container>(c)));
     }
 }

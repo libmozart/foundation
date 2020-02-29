@@ -11,7 +11,8 @@ add_library(mpp_foundation STATIC
 target_link_libraries(mpp_foundation mpp_core)
 set_target_properties(mpp_foundation PROPERTIES LINKER_LANGUAGE CXX)
 
-if (!WIN32)
+if (WIN32)
+else ()
     target_link_libraries(mpp_foundation pthread)
 endif ()
 
@@ -21,7 +22,7 @@ set_property(TARGET mpp_foundation-bench-any PROPERTY CXX_STANDARD 17)
 
 ## test and benchmark targets here
 file(GLOB_RECURSE CPP_SRC_LIST tests/test-*.cpp)
-foreach(v ${CPP_SRC_LIST})
+foreach (v ${CPP_SRC_LIST})
     string(REGEX MATCH "tests/.*" relative_path ${v})
     string(REGEX REPLACE "tests/" "" target_name ${relative_path})
     string(REGEX REPLACE ".cpp" "" target_name ${target_name})
@@ -29,4 +30,4 @@ foreach(v ${CPP_SRC_LIST})
     add_executable(mpp_foundation-${target_name} ${v})
     target_link_libraries(mpp_foundation-${target_name} mpp_foundation)
     add_test(mpp_foundation-${target_name} mpp_foundation-${target_name})
-endforeach()
+endforeach ()

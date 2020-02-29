@@ -9,11 +9,9 @@
 #include <queue>
 #include <memory>
 #include <thread>
-#include <tuple>
 #include <typeindex>
 #include <mutex>
 #include <atomic>
-#include <condition_variable>
 #include <mozart++/core>
 
 using mpp::function;
